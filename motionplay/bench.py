@@ -97,7 +97,12 @@ def choose_tier(results: dict[str, Any]) -> tuple[str, int]:
 def run(cfg: Config, save: bool = True, log: Callable[[str], None] = print) -> dict[str, Any]:
     from .vision.runtime import available_providers
 
-    log(f"execution providers available: {', '.join(available_providers())}")
+    providers = available_providers()
+    if not providers:
+        log("no ONNX Runtime installed. Install one: pip install -e \".[directml]\" (Windows GPU), "
+            "\".[gpu]\" (NVIDIA CUDA/TensorRT) or \".[cpu]\"")
+        return {}
+    log(f"execution providers available: {', '.join(providers)}")
     results = bench_rtmpose(cfg, log=log)
     if not results:
         log("no RTMPose models could be loaded; the engine will use MediaPipe (lite path)")

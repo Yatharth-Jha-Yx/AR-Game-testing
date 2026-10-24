@@ -32,8 +32,11 @@ PROVIDERS = {
 
 
 def available_providers() -> list[str]:
-    import onnxruntime as ort
-
+    """Short names of usable providers; [] when no ONNX Runtime is installed."""
+    try:
+        import onnxruntime as ort
+    except ImportError:
+        return []
     reverse = {v: k for k, v in PROVIDERS.items()}
     return [reverse[p] for p in ort.get_available_providers() if p in reverse]
 

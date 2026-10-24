@@ -4,6 +4,7 @@ same inputs/outputs as the real mmdeploy exports (no downloads needed)."""
 import numpy as np
 import pytest
 
+pytest.importorskip("onnxruntime")
 onnx = pytest.importorskip("onnx")
 from onnx import TensorProto, helper, numpy_helper  # noqa: E402
 

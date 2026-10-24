@@ -28,27 +28,46 @@ WebSocket API, one test game) plus parts of weeks 4-8: the gesture library,
 2-4 player ID tracking and the segmentation mask. The other five games are
 listed in the launcher as "coming next".
 
-## Quick start (Windows + NVIDIA GTX 1650)
+## Quick start (Windows)
 
-```powershell
-# 1. Python 3.10 - 3.13, then in the repo folder:
-python -m venv .venv
-.venv\Scripts\activate
-pip install -e ".[mediapipe]"
+You need Python 3.10 or newer (3.14 is tested) from python.org, with "Add
+python.exe to PATH" ticked during install.
 
-# 2. Pick ONE GPU runtime (default is CPU-only onnxruntime):
-pip uninstall -y onnxruntime
-pip install onnxruntime-directml            # easiest: any DirectX 12 GPU, no CUDA install
-#   or, fastest on NVIDIA (TensorRT FP16 needs TensorRT 10 installed too):
-# pip install "onnxruntime-gpu[cuda,cudnn]" # pulls CUDA 13 + cuDNN 9 as pip packages
-
-# 3. Download models, measure this PC, start
-motionplay models download
-motionplay bench          # times every model here and picks a quality tier
-motionplay run --open     # opens http://localhost:8765/
-```
+1. **Get the code** into its own folder:
+   `git clone https://github.com/Yatharth-Jha-Yx/AR-Game-testing.git`
+   (or on GitHub: *Code > Download ZIP*, then unzip it).
+2. Open that folder and **double-click `setup_windows.bat`**. It creates a
+   private Python environment in `.venv`, installs everything, downloads the
+   models and measures your PC. For the NVIDIA CUDA/TensorRT build instead of
+   DirectML, run `setup_windows.bat nvidia` from a terminal in that folder.
+3. **Double-click `start_windows.bat`**. Your browser opens the launcher.
 
 Then: **Calibrate** (stand on a tape mark 2 m from the camera, T-pose), then play **Fruit Slice**.
+
+<details>
+<summary>Same thing by hand in PowerShell</summary>
+
+```powershell
+cd AR-Game-testing                      # the folder with pyproject.toml in it
+python -m venv .venv
+.venv\Scripts\python -m pip install -e ".[directml,mediapipe]"   # or ".[gpu,mediapipe]" for CUDA/TensorRT
+.venv\Scripts\python -m motionplay models download
+.venv\Scripts\python -m motionplay bench
+.venv\Scripts\python -m motionplay run --open
+```
+
+Calling `.venv\Scripts\python` directly means you never need to "activate"
+the environment. If you do want `.venv\Scripts\activate` to work, PowerShell
+blocks scripts by default; allow them for the current window only with
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+
+Install exactly **one** ONNX Runtime extra: `directml` (any DirectX 12 GPU,
+no CUDA needed), `gpu` (NVIDIA: pulls CUDA 13 + cuDNN 9; TensorRT FP16 also
+needs TensorRT 10 installed) or `cpu`. They all provide the same Python
+module, so two of them overwrite each other.
+</details>
+
+**Linux / macOS:** `python -m venv .venv && .venv/bin/pip install -e ".[cpu,mediapipe]"`, then `.venv/bin/motionplay run --open`.
 
 ### No camera? Try it anyway
 
@@ -175,7 +194,7 @@ Two plan numbers changed after measuring:
 ## Development
 
 ```bash
-pip install -e ".[dev,mediapipe]"
+pip install -e ".[cpu,dev,mediapipe]"
 pytest                       # 40 tests, ~45 s
 ```
 
