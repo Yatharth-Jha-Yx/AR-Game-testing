@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calibrate - MotionPlay</title>
+  <link rel="stylesheet" href="/sdk/style.css">
+  <style>
+    body { display: grid; grid-template-columns: 1fr minmax(300px, 380px); height: 100vh; }
+    #stage { position: relative; background: #000; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    aside { padding: 1.4rem; overflow: auto; display: flex; flex-direction: column; gap: 1rem; background: var(--panel); }
+    h1 { margin: 0; color: var(--accent); }
+    #message { font-size: 1.5rem; font-weight: 700; min-height: 3.6em; }
+    ul.checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+    ul.checks li { background: var(--panel-2); border-radius: 10px; padding: 0.6rem 0.8rem; display: flex; justify-content: space-between; }
+    .bar { height: 12px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+    .bar > div { height: 100%; width: 0; background: var(--ok); transition: width 0.1s; }
+    .buttons { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+    #result { white-space: pre-line; }
+    @media (max-width: 800px) { body { grid-template-columns: 1fr; grid-template-rows: 60vh auto; } }
+  </style>
+</head>
+<body>
+  <div id="stage"><canvas id="view"></canvas></div>
+  <aside>
+    <h1>Calibrate</h1>
+    <p class="muted">Put a piece of tape on the floor
+      <input id="distance" type="number" min="1" max="4" step="0.1" value="2.0" style="width:5em"> m from the camera
+      and stand on it, facing the screen.</p>
+    <div id="message">Press start when you're on the mark.</div>
+    <div class="bar"><div id="progress"></div></div>
+    <ul class="checks">
+      <li>Head to feet visible <span id="c-body">-</span></li>
+      <li>Good distance <span id="c-dist">-</span></li>
+      <li>Lighting <span id="c-light">-</span></li>
+      <li>T-pose held <span id="c-tpose">-</span></li>
+    </ul>
+    <div class="buttons">
+      <button id="start">Start calibration</button>
+      <button id="cancel" class="secondary">Cancel</button>
+    </div>
+    <div class="buttons">
+      <button id="lock" class="secondary">Lock camera now</button>
+      <button id="unlock" class="secondary">Unlock camera</button>
+    </div>
+    <div class="panel" id="result" hidden></div>
+    <a href="/">&larr; back</a>
+  </aside>
+<script type="module">
+  import { MotionPlay, drawAvatar, drawSkeleton } from "/sdk/motionplay.js";
+  import { installOverlay } from "/sdk/overlay.js";
+  const mp = new MotionPlay({ video: true, mouseFallback: false });
+  installOverlay(mp, { clearSpace: false, cooldownMinutes: 0 });
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("view"), ctx = canvas.getContext("2d");
+  let cal = null;
+
+  const mark = (el, ok, text) => { el.textContent = text ?? (ok ? "✔" : "✘"); el.className = ok ? "ok" : "bad"; };
+  $("start").onclick = () => { $("result").hidden = true; mp.calibrate(null, parseFloat($("distance").value)); };
+  $("cancel").onclick = () => mp.cancelCalibration();
+  $("lock").onclick = () => mp.lockCamera();
+  $("unlock").onclick = () => mp.unlockCamera();
+
+  mp.on("calibration", (m) => {
+    cal = m;
+    $("message").textContent = m.message || "";
+    $("progress").style.width = `${Math.round((m.progress || 0) * 100)}%`;
+    if (m.checks) {
+      mark($("c-body"), m.checks.full_body);
+      const issues = m.checks.issues || [];
+      mark($("c-dist"), !issues.includes("too_close") && !issues.includes("too_far"));
+      mark($("c-light"), m.checks.lighting === "ok", m.checks.lighting);
+    }
+    mark($("c-tpose"), m.state === "done", m.state === "tpose" ? "now!" : m.state === "done" ? "✔" : "-");
+    if (m.state === "done" && m.result) {
+      const r = m.result;
+      $("result").hidden = false;
+      $("result").textContent = `Player ${m.player_id} calibrated\nHeight about ${r.height_m} m\nArm span about ${r.wingspan_m} m\nDistance ${r.distance_m} m`;
+    }
+  });
+  mp.on("camera_lock", (m) => {
+    const r = m.report;
+    $("result").hidden = false;
+    $("result").textContent += r.unlocked ? "\nCamera back on auto" :
+      r.supported ? `\nCamera locked: exposure ${r.exposure_seconds ? "1/" + Math.round(1 / r.exposure_seconds) + " s" : r.exposure_readback}, autofocus off` :
+      `\nCamera lock: ${r.reason}`;
+  });
+
+  function draw() {
+    const w = canvas.clientWidth, h = canvas.clientHeight, dpr = devicePixelRatio || 1;
+    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#0b0c1a"; ctx.fillRect(0, 0, w, h);
+    const view = mp.view(w, h);
+    if (mp.videoAllowed) view.drawVideo(ctx);
+    // Target zone: where a full body should fit.
+    ctx.save();
+    ctx.setLineDash([14, 10]); ctx.lineWidth = 4;
+    ctx.strokeStyle = cal && cal.checks && cal.checks.full_body ? "#80ed99" : "rgba(255,255,255,0.7)";
+    const zw = view.height * 0.42, zh = view.height * 0.9;
+    ctx.beginPath(); ctx.roundRect(w / 2 - zw / 2, view.y + view.height * 0.05, zw, zh, 40); ctx.stroke();
+    ctx.restore();
+    for (const b of mp.bodies()) {
+      if (mp.videoAllowed) drawSkeleton(ctx, mp, b, view); else drawAvatar(ctx, mp, b, view);
+      const top = view.toScreen({ x: (b.bbox[0] + b.bbox[2]) / 2, y: b.bbox[1] });
+      ctx.font = "700 22px system-ui"; ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+      ctx.fillText(`P${b.id} · ${b.depth.toFixed(2)} m${b.depthCalibrated ? "" : " (est.)"}`, top.x, top.y - 12);
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+</script>
+</body>
+</html>

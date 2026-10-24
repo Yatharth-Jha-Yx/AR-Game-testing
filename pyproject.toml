@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "motionplay"
+version = "0.1.0"
+description = "Webcam motion console: on-device body tracking engine + AR browser games"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    # contrib build is a superset of opencv-python and is what mediapipe
+    # depends on, so we never end up with two packages fighting over cv2.
+    "opencv-contrib-python>=4.8",
+    "onnxruntime>=1.17",
+    "aiohttp>=3.9",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+# NVIDIA (GTX 1650 etc.): CUDA + TensorRT execution providers.
+# Install *instead of* the CPU onnxruntime: pip uninstall onnxruntime
+gpu = ["onnxruntime-gpu>=1.17"]
+# Any DirectX 12 GPU on Windows (Intel/AMD/NVIDIA).
+directml = ["onnxruntime-directml>=1.17"]
+# Lite single-player path + selfie segmentation.
+mediapipe = ["mediapipe>=0.10.14"]
+dev = ["pytest>=8", "pytest-aiohttp>=1.0", "onnx>=1.15"]
+
+[project.scripts]
+motionplay = "motionplay.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["motionplay*"]
+
+[tool.setuptools.package-data]
+motionplay = ["web/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning"]

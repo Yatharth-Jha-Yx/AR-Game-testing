@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Body viewer - MotionPlay</title>
+  <link rel="stylesheet" href="/sdk/style.css">
+  <style>
+    body { display: grid; grid-template-columns: 1fr 360px; height: 100vh; }
+    #stage { position: relative; background: #000; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    aside { background: var(--panel); padding: 1rem; overflow: auto; font-size: 14px; display: flex; flex-direction: column; gap: 0.8rem; }
+    #log { font-family: ui-monospace, monospace; display: flex; flex-direction: column-reverse; gap: 2px; max-height: 45vh; overflow: auto; }
+    #log div { background: var(--panel-2); padding: 3px 8px; border-radius: 6px; }
+    pre { margin: 0; white-space: pre-wrap; font-size: 12px; }
+    @media (max-width: 800px) { body { grid-template-columns: 1fr; grid-template-rows: 60vh auto; } }
+  </style>
+</head>
+<body>
+  <div id="stage"><canvas id="view"></canvas></div>
+  <aside>
+    <strong>Gestures</strong>
+    <div id="log"></div>
+    <strong>Engine</strong>
+    <pre id="status">waiting...</pre>
+    <a href="/">&larr; back</a>
+  </aside>
+<script type="module">
+  import { MotionPlay, drawSkeleton, playerColor } from "/sdk/motionplay.js";
+  const mp = new MotionPlay({ video: true });
+  const canvas = document.getElementById("view"), ctx = canvas.getContext("2d");
+  const log = document.getElementById("log");
+  let rtt = null;
+  const add = (text, color) => {
+    const d = document.createElement("div");
+    d.textContent = `${new Date().toLocaleTimeString()}  ${text}`;
+    if (color) d.style.borderLeft = `4px solid ${color}`;
+    log.prepend(d);
+    while (log.children.length > 80) log.lastChild.remove();
+  };
+  mp.on("gesture", (g) => add(`P${g.player_id} ${g.gesture} ${g.phase}${g.side ? " " + g.side : ""}${g.direction ? " -> " + g.direction : ""} (${g.strength.toFixed(2)})`, playerColor(g.player_id)));
+  mp.on("player", (p) => add(`player ${p.player_id} ${p.event}`, "#fff"));
+  mp.on("pong", (m) => { rtt = performance.now() - m.t; });
+  setInterval(() => mp.send({ type: "ping", t: performance.now() }), 1000);
+  mp.on("status", (s) => {
+    document.getElementById("status").textContent = JSON.stringify({ ...s, websocket_rtt_ms: rtt && +rtt.toFixed(1) }, null, 1);
+  });
+  function draw() {
+    const w = canvas.clientWidth, h = canvas.clientHeight, dpr = devicePixelRatio || 1;
+    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#111"; ctx.fillRect(0, 0, w, h);
+    const view = mp.view(w, h);
+    if (mp.videoAllowed) { view.drawVideo(ctx); ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fillRect(0, 0, w, h); }
+    for (const b of mp.bodies()) {
+      drawSkeleton(ctx, mp, b, view);
+      const p0 = view.toScreen({ x: b.bbox[0], y: b.bbox[1] }), p1 = view.toScreen({ x: b.bbox[2], y: b.bbox[3] });
+      ctx.strokeStyle = playerColor(b.id); ctx.lineWidth = 1; ctx.strokeRect(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y);
+      ctx.font = "600 16px system-ui"; ctx.fillStyle = playerColor(b.id);
+      ctx.fillText(`P${b.id}  ${b.depth.toFixed(2)} m${b.depthCalibrated ? "" : "?"}  x ${b.position.x.toFixed(2)}  ${b.inBounds ? "" : "[" + b.boundsHint + "]"}${b.predicted ? " (pred)" : ""}`, p0.x, p0.y - 8);
+    }
+    if (mp.frame) { ctx.fillStyle = "#fff"; ctx.font = "14px ui-monospace"; ctx.fillText(`frame ${mp.frame.seq}  latency ${mp.frame.latency_ms} ms  mode ${mp.mode}`, 10, h - 12); }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+</script>
+</body>
+</html>
