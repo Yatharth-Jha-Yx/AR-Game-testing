@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+# Downloaded model weights and TensorRT engine caches live in ~/.motionplay,
+# but keep local copies out of git too.
+models/
+*.onnx
+*.engine
+*.task
+*.tflite
+.motionplay/

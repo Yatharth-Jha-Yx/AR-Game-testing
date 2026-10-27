@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MotionPlay</title>
+  <link rel="stylesheet" href="/sdk/style.css">
+  <style>
+    main { max-width: 1100px; margin: 0 auto; padding: 2rem 1.2rem 4rem; }
+    header { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+    h1 { font-size: clamp(2rem, 5vw, 3.2rem); margin: 0; color: var(--accent); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .card { background: var(--panel); border-radius: var(--radius); padding: 1.3rem; display: flex; flex-direction: column; gap: 0.6rem; text-decoration: none; color: var(--text); border: 2px solid transparent; }
+    .card:hover, .card:focus { border-color: var(--accent); }
+    .card h3 { margin: 0; font-size: 1.4rem; }
+    .card .tag { font-size: 0.8rem; color: var(--muted); }
+    .card.soon { opacity: 0.45; pointer-events: none; }
+    .status { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.6rem; margin-top: 1.5rem; }
+    .stat { background: var(--panel); border-radius: 12px; padding: 0.8rem 1rem; }
+    .stat b { display: block; font-size: 1.3rem; }
+    .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-top: 1.5rem; }
+    label.switch { display: flex; gap: 0.6rem; align-items: center; cursor: pointer; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>MotionPlay</h1>
+    <span class="muted">your webcam is the controller</span>
+  </header>
+
+  <div class="status">
+    <div class="stat"><span class="muted">Engine</span><b id="s-engine">connecting...</b></div>
+    <div class="stat"><span class="muted">Camera</span><b id="s-camera">-</b></div>
+    <div class="stat"><span class="muted">Tracking</span><b id="s-fps">-</b></div>
+    <div class="stat"><span class="muted">Latency (capture to send)</span><b id="s-lat">-</b></div>
+    <div class="stat"><span class="muted">Players</span><b id="s-players">0</b></div>
+  </div>
+
+  <h2>Get set up</h2>
+  <div class="grid">
+    <a class="card" href="/calibrate.html">
+      <h3>1. Calibrate</h3>
+      <span>Stand on your floor mark, get your whole body in view, hold a T-pose. Locks the camera exposure.</span>
+      <span class="tag">~20 seconds per player</span>
+    </a>
+    <a class="card" href="/debug.html">
+      <h3>Body viewer</h3>
+      <span>See what the engine sees: skeletons, player IDs, depth, gestures and timings.</span>
+      <span class="tag">for testing and tuning</span>
+    </a>
+  </div>
+
+  <h2>Games</h2>
+  <div class="grid">
+    <a class="card" href="/games/fruit-slice/">
+      <h3>Fruit Slice</h3>
+      <span>Swing your hands fast to slice fruit. Dodge the bombs.</span>
+      <span class="tag">1-4 players · hand speed + position</span>
+    </a>
+    <div class="card soon"><h3>Dodge the Wall</h3><span>Match the shape cut in the wall.</span><span class="tag">coming next · full-body pose</span></div>
+    <div class="card soon"><h3>Rhythm Steps</h3><span>Step and dance on the beat.</span><span class="tag">coming next · timing + feet</span></div>
+    <div class="card soon"><h3>Balloon Pop</h3><span>Pop balloons together.</span><span class="tag">coming next · multiplayer</span></div>
+    <div class="card soon"><h3>Shadow Boxing</h3><span>Punch the targets.</span><span class="tag">coming next · punches + depth</span></div>
+    <div class="card soon"><h3>Yoga Coach</h3><span>Gentle poses with feedback.</span><span class="tag">coming next · joint angles</span></div>
+  </div>
+
+  <h2>Privacy</h2>
+  <div class="panel">
+    <p>Everything runs on this computer. The camera picture is never recorded and never leaves this machine
+       (the engine only listens on <code>127.0.0.1</code>).</p>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="skeleton"> Skeleton-only mode (games show avatars instead of the camera picture)</label>
+    </div>
+    <p class="muted" id="parental"></p>
+  </div>
+</main>
+<script type="module">
+  import { MotionPlay } from "/sdk/motionplay.js";
+  const mp = new MotionPlay({ mouseFallback: false });
+  const $ = (id) => document.getElementById(id);
+  mp.on("connection", (c) => {
+    $("s-engine").textContent = c.connected ? "running" : "not running";
+    $("s-engine").className = c.connected ? "ok" : "bad";
+    if (!c.connected) $("s-camera").innerHTML = "start with <code>motionplay run</code>";
+  });
+  mp.on("settings", (s) => {
+    $("skeleton").checked = !!s.skeleton_only;
+    $("parental").textContent = s.video_enabled === false
+      ? "Parental mode is ON: the engine never sends camera video to games (change with config privacy.video_enabled)."
+      : "Parental mode is off. Run with --no-video (or set privacy.video_enabled=false) to block camera video in all games.";
+  });
+  $("skeleton").addEventListener("change", (e) => mp.setSkeletonOnly(e.target.checked));
+  mp.on("status", (s) => {
+    const src = s.source;
+    $("s-camera").textContent = `${src.name} ${src.width}x${src.height}` + (src.measured_fps ? ` @${src.measured_fps}` : "");
+    $("s-fps").textContent = `${s.processed_fps} fps · ${s.backend.name}`;
+    $("s-lat").textContent = `${s.latency_ms.mean} ms (p95 ${s.latency_ms.p95})`;
+    $("s-players").textContent = s.players.filter((p) => p.state === "active").length;
+  });
+</script>
+</body>
+</html>

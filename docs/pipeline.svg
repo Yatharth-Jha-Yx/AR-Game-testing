@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" width="960" height="300" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="960" height="300" rx="14" fill="#0f1020"/>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a7a9c9"/>
+    </marker>
+  </defs>
+  <g font-size="13" fill="#f4f4fb">
+    <!-- capture -->
+    <rect x="20" y="70" width="150" height="110" rx="12" fill="#24274a" stroke="#4cc9f0"/>
+    <text x="95" y="96" text-anchor="middle" font-weight="700" fill="#4cc9f0">Capture thread</text>
+    <text x="95" y="120" text-anchor="middle">Webcam 1080p60</text>
+    <text x="95" y="138" text-anchor="middle">MJPEG decode</text>
+    <text x="95" y="156" text-anchor="middle">newest frame wins</text>
+
+    <!-- inference -->
+    <rect x="210" y="40" width="430" height="200" rx="12" fill="#1b1d36" stroke="#ffd166"/>
+    <text x="425" y="64" text-anchor="middle" font-weight="700" fill="#ffd166">Inference thread</text>
+    <rect x="228" y="80" width="120" height="62" rx="9" fill="#24274a"/>
+    <text x="288" y="104" text-anchor="middle">Detector</text>
+    <text x="288" y="122" text-anchor="middle" fill="#a7a9c9" font-size="11">every 10 frames</text>
+    <rect x="228" y="158" width="120" height="62" rx="9" fill="#24274a"/>
+    <text x="288" y="182" text-anchor="middle">RTMPose</text>
+    <text x="288" y="200" text-anchor="middle" fill="#a7a9c9" font-size="11">all players, 1 batch</text>
+    <rect x="368" y="80" width="120" height="62" rx="9" fill="#24274a"/>
+    <text x="428" y="104" text-anchor="middle">Tracker</text>
+    <text x="428" y="122" text-anchor="middle" fill="#a7a9c9" font-size="11">IDs, OKS, re-ID</text>
+    <rect x="368" y="158" width="120" height="62" rx="9" fill="#24274a"/>
+    <text x="428" y="182" text-anchor="middle">One-Euro</text>
+    <text x="428" y="200" text-anchor="middle" fill="#a7a9c9" font-size="11">smooth + predict</text>
+    <rect x="508" y="80" width="116" height="62" rx="9" fill="#24274a"/>
+    <text x="566" y="104" text-anchor="middle">Depth</text>
+    <text x="566" y="122" text-anchor="middle" fill="#a7a9c9" font-size="11">calibration</text>
+    <rect x="508" y="158" width="116" height="62" rx="9" fill="#24274a"/>
+    <text x="566" y="182" text-anchor="middle">Gestures</text>
+    <text x="566" y="200" text-anchor="middle" fill="#a7a9c9" font-size="11">jump, swipe...</text>
+
+    <!-- server -->
+    <rect x="680" y="70" width="120" height="110" rx="12" fill="#24274a" stroke="#80ed99"/>
+    <text x="740" y="96" text-anchor="middle" font-weight="700" fill="#80ed99">Server</text>
+    <text x="740" y="120" text-anchor="middle">WebSocket</text>
+    <text x="740" y="138" text-anchor="middle">127.0.0.1 only</text>
+    <text x="740" y="156" text-anchor="middle" fill="#a7a9c9" font-size="11">BodyState + events</text>
+
+    <!-- games -->
+    <rect x="830" y="70" width="110" height="110" rx="12" fill="#24274a" stroke="#f72585"/>
+    <text x="885" y="96" text-anchor="middle" font-weight="700" fill="#f72585">Games</text>
+    <text x="885" y="120" text-anchor="middle">Browser SDK</text>
+    <text x="885" y="138" text-anchor="middle">Fruit Slice</text>
+    <text x="885" y="156" text-anchor="middle">Godot / Unity</text>
+  </g>
+  <g stroke="#a7a9c9" stroke-width="2" fill="none" marker-end="url(#a)">
+    <path d="M170 125 H226"/>
+    <path d="M288 142 V156"/>
+    <path d="M348 189 H358 V111 H366"/>
+    <path d="M428 142 V156"/>
+    <path d="M488 189 H498 V111 H506"/>
+    <path d="M566 142 V156"/>
+    <path d="M624 189 H652 V125 H678"/>
+    <path d="M800 125 H828"/>
+  </g>
+  <text x="480" y="276" text-anchor="middle" font-size="12" fill="#a7a9c9">Video never leaves the PC. Games get joints + gesture events, never camera access.</text>
+</svg>
