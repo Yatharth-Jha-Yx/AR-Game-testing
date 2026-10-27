@@ -92,28 +92,20 @@ class CameraSource(FrameSource):
         self._locker: uvc.ExposureLocker | None = None
         self._last_t = 0.0
         self.measured_fps = 0.0
+        self.mode = ""
 
     def open(self) -> None:
-        cap = cv2.VideoCapture(self.index, _APIS.get(self.api_name, cv2.CAP_ANY))
-        if not cap.isOpened():
-            raise RuntimeError(f"could not open camera {self.index} via {self.api_name}")
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*self.cfg.fourcc))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cfg.width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cfg.height)
-        cap.set(cv2.CAP_PROP_FPS, self.cfg.fps)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.fps = float(cap.get(cv2.CAP_PROP_FPS)) or float(self.cfg.fps)
-        fourcc = int(cap.get(cv2.CAP_PROP_FOURCC))
-        got = "".join(chr((fourcc >> (8 * i)) & 0xFF) for i in range(4))
-        log.info("camera %d (%s): %dx%d @ %.1f fps, fourcc=%r",
-                 self.index, self.api_name, self.width, self.height, self.fps, got)
-        if (self.width, self.height) != (self.cfg.width, self.cfg.height) or self.fps < self.cfg.fps - 1:
-            log.warning("camera gave %dx%d@%.0f instead of %dx%d@%d (try another USB port/cable, "
-                        "or a camera that supports MJPEG)", self.width, self.height, self.fps,
-                        self.cfg.width, self.cfg.height, self.cfg.fps)
-        self.cap = cap
+        from .negotiate import negotiate
+
+        print(f"  Checking camera {self.index} modes (first time takes a few seconds)...", flush=True)
+        result = negotiate(self.index, self.cfg)
+        self.cap = result.cap
+        self.api_name = result.attempt.api
+        self.width, self.height = result.width, result.height
+        self.fps = float(result.attempt.fps if result.ok else max(1.0, round(result.measured_fps)))
+        self.mode = f"{result.width}x{result.height} {result.fourcc}"
+        self.measured_fps = result.measured_fps
+        log.info("camera %d: %s", self.index, result.describe())
 
     def read(self) -> Frame | None:
         assert self.cap is not None
@@ -154,7 +146,7 @@ class CameraSource(FrameSource):
 
     def info(self) -> dict[str, Any]:
         d = super().info()
-        d.update(api=self.api_name, measured_fps=round(self.measured_fps, 1))
+        d.update(api=self.api_name, measured_fps=round(self.measured_fps, 1), mode=self.mode)
         return d
 
 
@@ -257,24 +249,23 @@ def open_source(cfg: CameraConfig) -> FrameSource:
     return src
 
 
-def probe_cameras(max_index: int = 6) -> list[dict[str, Any]]:
-    """List cameras that open, and whether 1080p60 MJPEG sticks on each."""
+def probe_cameras(max_index: int = 4) -> list[dict[str, Any]]:
+    """For each camera that opens: the best mode it *really* delivers
+    (timed frames, not the driver's claim)."""
+    from .negotiate import negotiate
+
     found = []
-    api = _APIS[default_api()]
     for index in range(max_index):
-        cap = cv2.VideoCapture(index, api)
-        if not cap.isOpened():
-            cap.release()
-            continue
-        modes = []
-        for w, h, fps in ((1920, 1080, 60), (1920, 1080, 30), (1280, 720, 60), (1280, 720, 30)):
-            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
-            cap.set(cv2.CAP_PROP_FPS, fps)
-            got = (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-                   round(cap.get(cv2.CAP_PROP_FPS)))
-            modes.append({"asked": [w, h, fps], "got": list(got), "ok": got == (w, h, fps)})
-        found.append({"index": index, "api": default_api(), "modes": modes})
+        cap = cv2.VideoCapture(index, _APIS[default_api()])
+        opened = cap.isOpened()
         cap.release()
+        if not opened:
+            continue
+        try:
+            result = negotiate(index, CameraConfig(), use_cache=False)
+        except RuntimeError as exc:
+            found.append({"index": index, "error": str(exc)})
+            continue
+        found.append({"index": index, "best": result.describe(), "ok": result.ok, "api": result.attempt.api})
+        result.cap.release()
     return found

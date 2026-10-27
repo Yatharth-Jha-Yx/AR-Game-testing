@@ -258,7 +258,8 @@ def health_line(st: dict[str, Any]) -> str:
     cam = st["source"].get("measured_fps") or st["source"].get("fps")
     tm = st["timings_ms"]
     ai = tm.get("pose", 0) + tm.get("detect", 0) / 10
-    return (f"camera {cam:.0f} fps | tracking {st['processed_fps']} fps | pose {ai:.1f} ms | "
+    mode = st["source"].get("mode")
+    return (f"camera {mode + ' ' if mode else ''}{cam:.0f} fps | tracking {st['processed_fps']} fps | pose {ai:.1f} ms | "
             f"delay {st['latency_ms']['mean']:.0f} ms (p95 {st['latency_ms']['p95']:.0f}) | "
             f"players {sum(p['state'] == 'active' for p in st['players'])}")
 

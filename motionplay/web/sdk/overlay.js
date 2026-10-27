@@ -38,7 +38,8 @@ export function installOverlay(mp, opts = {}) {
     const cam = st.source.measured_fps || st.source.fps;
     const tm = st.timings_ms;
     const ai = (tm.pose || 0) + (tm.detect || 0) / 10;
-    stats.textContent = `camera ${Math.round(cam)} fps · tracking ${st.processed_fps} fps · ` +
+    const mode = st.source.mode ? `${st.source.mode} ` : "";
+    stats.textContent = `camera ${mode}${Math.round(cam)} fps · tracking ${st.processed_fps} fps · ` +
       `AI ${ai.toFixed(1)} ms · delay ${Math.round(st.latency_ms.mean)} ms · ` +
       `${st.backend.name} (${st.backend.provider})`;
     stats.hidden = !statsOn;

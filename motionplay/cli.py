@@ -125,9 +125,10 @@ def cmd_cameras(args: argparse.Namespace) -> int:
         print("no cameras found")
         return 1
     for cam in cams:
-        print(f"camera:{cam['index']} ({cam['api']})")
-        for m in cam["modes"]:
-            print(f"   asked {m['asked']} got {m['got']} {'OK' if m['ok'] else ''}")
+        if "error" in cam:
+            print(f"camera:{cam['index']}  {cam['error']}")
+        else:
+            print(f"camera:{cam['index']}  best mode: {cam['best']}  {'OK' if cam['ok'] else 'SLOW'}")
     return 0
 
 
