@@ -71,12 +71,16 @@ def bench_rtmpose(cfg: Config, runs: int = 30, log: Callable[[str], None] = prin
             failed.add(names["pose"])
             log(f"  {tier}: pose model unavailable ({exc})")
             continue
-        if names["detector"] not in det_cache:
-            det = PersonDetector(det_path, det_spec, cfg.vision.providers, cfg.vision.fp16)
-            det_cache[names["detector"]] = _time(lambda: det(image), runs)
-            log(f"  detector {names['detector']} on {det.provider}: {det_cache[names['detector']]:.2f} ms")
-        pose = TopDownPose(pose_path, pose_spec, cfg.vision.providers, cfg.vision.fp16, max_batch=4)
-        per_batch = {n: _time(lambda n=n: pose(image, boxes[:n]), runs) for n in (1, 2, 4)}
+        try:
+            if names["detector"] not in det_cache:
+                det = PersonDetector(det_path, det_spec, cfg.vision.providers, cfg.vision.fp16)
+                det_cache[names["detector"]] = _time(lambda: det(image), runs)
+                log(f"  detector {names['detector']} on {det.provider}: {det_cache[names['detector']]:.2f} ms")
+            pose = TopDownPose(pose_path, pose_spec, cfg.vision.providers, cfg.vision.fp16, max_batch=4)
+            per_batch = {n: _time(lambda n=n: pose(image, boxes[:n]), runs) for n in (1, 2, 4)}
+        except Exception as exc:  # noqa: BLE001 - report and try the next tier
+            log(f"  {tier}: failed to run ({type(exc).__name__}: {exc})")
+            continue
         det_ms = det_cache[names["detector"]]
         two_players = det_ms / cfg.vision.detect_interval + per_batch[2]
         results[tier] = {"pose_model": names["pose"], "provider": pose.provider, "detector_ms": det_ms,

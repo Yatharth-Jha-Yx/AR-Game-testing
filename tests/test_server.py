@@ -112,3 +112,12 @@ async def test_static_files_and_traversal(setup):
     assert (await client.get("/nope.html")).status == 404
     status = await (await client.get("/api/status")).json()
     assert status["type"] == "status" and status["backend"]["name"].startswith("synthetic")
+
+
+async def test_health_line_reports_camera_tracking_and_delay(setup):
+    from motionplay.server import health_line
+
+    _, engine, _ = await setup()
+    await asyncio.sleep(1.5)
+    line = health_line(engine.status())
+    assert line.startswith("camera ") and "tracking" in line and "delay" in line and "players 1" in line

@@ -123,3 +123,23 @@ def test_parse_mmdeploy_pipeline():
     assert found["input_size"] == (192, 256)
     assert found["mean"] == (1.0, 2.0, 3.0) and found["to_rgb"] is True
     assert found["extra"]["simcc_split_ratio"] == 2.0
+
+
+def test_pad_value_in_any_mmdeploy_form(tmp_path):
+    """Regression: RTMDet's pipeline.json writes pad_val as a list, which
+    crashed `motionplay bench` on the first real Windows install."""
+    from dataclasses import replace
+
+    from motionplay.vision.models import pad_scalar
+
+    assert pad_scalar(114) == 114
+    assert pad_scalar([114, 114, 114]) == 114
+    assert pad_scalar({"img": [114, 114, 114]}) == 114
+    assert pad_scalar(None) == 114
+    found = parse_pipeline({"pipeline": {"tasks": [{"transforms": [
+        {"type": "Pad", "size": [320, 320], "pad_val": {"img": [114, 114, 114]}}]}]}})
+    assert found["extra"]["pad_val"] == 114
+    make_fake_detector(tmp_path / "det.onnx", [[25, 10, 75, 160, 0.9]], [0])
+    spec = replace(DET_SPEC, extra={"pad_val": [114, 114, 114]})
+    det = PersonDetector(tmp_path / "det.onnx", spec, ["cpu"], fp16=False)
+    assert det(np.zeros((720, 1280, 3), np.uint8)).shape == (1, 5)

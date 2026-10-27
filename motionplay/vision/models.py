@@ -193,6 +193,19 @@ def _with_pipeline(spec: ModelSpec, pipeline_json: Path) -> ModelSpec:
     return replace(spec, **found) if found else spec
 
 
+def pad_scalar(pad: Any, default: int = 114) -> int:
+    """mmdeploy writes the padding colour as 114, [114, 114, 114] or
+    {"img": [114, 114, 114]}; we only need one grey level."""
+    if isinstance(pad, dict):
+        pad = pad.get("img", default)
+    if isinstance(pad, (list, tuple)):
+        pad = pad[0] if pad else default
+    try:
+        return int(pad)
+    except (TypeError, ValueError):
+        return default
+
+
 def parse_pipeline(data: dict[str, Any]) -> dict[str, Any]:
     found: dict[str, Any] = {}
     extra: dict[str, Any] = {}
@@ -207,8 +220,7 @@ def parse_pipeline(data: dict[str, Any]) -> dict[str, Any]:
                 w, h = tr["input_size"]
                 found["input_size"] = (int(w), int(h))
             elif kind == "Pad" and tr.get("pad_val") is not None:
-                pad = tr["pad_val"]
-                extra["pad_val"] = pad.get("img", 114) if isinstance(pad, dict) else pad
+                extra["pad_val"] = pad_scalar(tr["pad_val"])
         params = task.get("params") or {}
         if "simcc_split_ratio" in params:
             extra["simcc_split_ratio"] = float(params["simcc_split_ratio"])

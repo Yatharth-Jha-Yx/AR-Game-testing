@@ -253,6 +253,25 @@ class Server:
         return web.FileResponse(path, headers={"Cache-Control": "no-cache"})
 
 
+def health_line(st: dict[str, Any]) -> str:
+    """One line that says where any lag comes from: the camera, the AI, or neither."""
+    cam = st["source"].get("measured_fps") or st["source"].get("fps")
+    tm = st["timings_ms"]
+    ai = tm.get("pose", 0) + tm.get("detect", 0) / 10
+    return (f"camera {cam:.0f} fps | tracking {st['processed_fps']} fps | pose {ai:.1f} ms | "
+            f"delay {st['latency_ms']['mean']:.0f} ms (p95 {st['latency_ms']['p95']:.0f}) | "
+            f"players {sum(p['state'] == 'active' for p in st['players'])}")
+
+
+async def _health_loop(engine: Engine, every_s: float = 5.0) -> None:
+    while True:
+        await asyncio.sleep(every_s)
+        try:
+            print("  " + health_line(engine.status()), flush=True)
+        except Exception:  # noqa: BLE001 - diagnostics must never stop the engine
+            log.debug("health line failed", exc_info=True)
+
+
 def run_server(engine: Engine, cfg: Config, open_browser: bool = False) -> None:
     server = Server(engine, cfg)
     url = f"http://{'localhost' if cfg.server.host in ('127.0.0.1', '0.0.0.0') else cfg.server.host}:{cfg.server.port}/"
@@ -265,11 +284,16 @@ def run_server(engine: Engine, cfg: Config, open_browser: bool = False) -> None:
         print(f"\n  MotionPlay engine running - open {url}\n  backend: {engine.backend.name} "
               f"({engine.backend.provider}), source: {engine.source.name} "
               f"{engine.w}x{engine.h}@{engine.fps:.0f}\n", flush=True)
+        if engine.backend.name.startswith("mediapipe") and cfg.vision.backend != "mediapipe":
+            print("  NOTE: running the CPU fallback (MediaPipe) because RTMPose could not start -\n"
+                  "  see the warning above. Expect more lag and only one player.\n", flush=True)
+        app["health_task"] = asyncio.create_task(_health_loop(engine))
         if open_browser:
             import webbrowser
             webbrowser.open(url)
 
     async def on_cleanup(app: web.Application) -> None:
+        app["health_task"].cancel()
         engine.stop()
 
     server.app.on_startup.append(on_start)

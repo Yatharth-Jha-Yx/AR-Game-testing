@@ -21,7 +21,7 @@ import numpy as np
 from ..skeleton import NUM_KEYPOINTS, complete_from_coco17
 from ..types import Frame, PoseCandidate
 from .base import PoseBackend
-from .models import ModelSpec
+from .models import ModelSpec, pad_scalar
 from .runtime import active_provider, create_session, session_input
 
 
@@ -56,7 +56,7 @@ class PersonDetector:
         self.input = session_input(self.sess)
         hw = self.input.hw
         self.size = (hw[1], hw[0]) if hw else spec.input_size
-        self.pad_val = int(spec.extra.get("pad_val", 114))
+        self.pad_val = pad_scalar(spec.extra.get("pad_val", 114))
         self.provider = active_provider(self.sess)
 
     def __call__(self, image: np.ndarray, score_thr: float = 0.15) -> np.ndarray:

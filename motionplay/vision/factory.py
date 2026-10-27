@@ -86,7 +86,9 @@ def build_backend(cfg: Config, source_name: str = "") -> PoseBackend:
     if kind == "mediapipe":
         from .mediapipe_backend import MediaPipePoseBackend
         path, _ = models.ensure(names["mediapipe"])
-        return MediaPipePoseBackend(str(path), num_poses=min(v.max_players, 2), name=names["mediapipe"])
+        # One pose: asking for 2 re-runs the person detector every frame when only
+        # one person is visible (measured 18.9 vs 10.9 ms per 1080p frame on CPU).
+        return MediaPipePoseBackend(str(path), num_poses=1, name=names["mediapipe"])
     raise ValueError(f"unknown backend {kind!r}")
 
 
