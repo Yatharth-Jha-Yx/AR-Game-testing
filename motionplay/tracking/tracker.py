@@ -55,9 +55,41 @@ def oks(k1: np.ndarray, s1: np.ndarray, k2: np.ndarray, s2: np.ndarray, area: fl
     return float(np.mean(np.exp(-d2 / (2 * area * var))))
 
 
-def quality(scores: np.ndarray) -> float:
-    """Pose quality = mean confidence of the core body joints."""
-    return float(np.mean(scores[_CORE]))
+_FACE = [J.NOSE, J.LEFT_EYE, J.RIGHT_EYE, J.LEFT_EAR, J.RIGHT_EAR, J.LEFT_SHOULDER, J.RIGHT_SHOULDER]
+
+
+def same_face(a: PoseCandidate, b: PoseCandidate, thr: float = 0.4) -> bool:
+    """Two skeletons whose face and shoulders sit in the same place are one
+    person, however differently their (often guessed) legs came out. Two
+    real people can't share a face position."""
+    both = (a.scores[_FACE] >= thr) & (b.scores[_FACE] >= thr)
+    if both.sum() < 3:
+        return False
+    idx = np.array(_FACE)[both]
+    ls, rs = J.LEFT_SHOULDER, J.RIGHT_SHOULDER
+    scale = max(np.linalg.norm(a.kpts[ls] - a.kpts[rs]), np.linalg.norm(b.kpts[ls] - b.kpts[rs]),
+                np.linalg.norm(a.kpts[J.LEFT_EYE] - a.kpts[J.RIGHT_EYE]) * 3, 1.0)
+    d = np.linalg.norm(a.kpts[idx] - b.kpts[idx], axis=1)
+    return float(np.median(d)) < 0.2 * scale
+
+
+def clip_box(box: np.ndarray, w: int, h: int) -> np.ndarray:
+    out = box.copy()
+    out[[0, 2]] = np.clip(out[[0, 2]], 0, w)
+    out[[1, 3]] = np.clip(out[[1, 3]], 0, h)
+    return out
+
+
+def quality(scores: np.ndarray, in_frame: np.ndarray | None = None) -> float:
+    """Pose quality = mean confidence of the core body joints that are inside
+    the picture (someone close to the camera is still a real person even
+    though their hips are out of view). Needs at least 4 such joints."""
+    core = np.array(_CORE)
+    if in_frame is not None:
+        core = core[in_frame[core]]
+        if len(core) < 4:
+            return 0.0
+    return float(np.mean(scores[core]))
 
 
 def torso_histogram(image: np.ndarray, kpts: np.ndarray, scores: np.ndarray) -> np.ndarray | None:
@@ -138,12 +170,19 @@ class PlayerTracker:
         """Associate this frame's poses to players. Returns player events."""
         events: list[dict[str, Any]] = []
         vcfg = self.cfg.vision
-        cands = self._dedupe([c for c in cands if quality(c.scores) >= vcfg.min_pose_score * 0.5])
+        for c in cands:
+            # Models guess joints outside the picture (e.g. legs of someone close
+            # to the camera). Those guesses are not observations: zero them.
+            x, y = c.kpts[:, 0], c.kpts[:, 1]
+            outside = (x < -0.02 * self.w) | (x > 1.02 * self.w) | (y < -0.02 * self.h) | (y > 1.02 * self.h)
+            c.scores = np.where(outside, 0.0, c.scores).astype(np.float32)
+            c.in_frame = ~outside
+        cands = self._dedupe([c for c in cands if quality(c.scores, c.in_frame) >= vcfg.min_pose_score * 0.5])
         for c in cands:
             # Occluded joints still carry a rough position; use them for the box
-            # so a half-hidden player keeps a full-size box.
-            c.box = boxes_from_keypoints(c.kpts, c.scores, thr=0.1)
-        high = [i for i, c in enumerate(cands) if quality(c.scores) >= vcfg.min_pose_score]
+            # so a half-hidden player keeps a full-size box. Never past the edges.
+            c.box = clip_box(boxes_from_keypoints(c.kpts, c.scores, thr=0.1), self.w, self.h)
+        high = [i for i, c in enumerate(cands) if quality(c.scores, c.in_frame) >= vcfg.min_pose_score]
         low = [i for i, c in enumerate(cands) if i not in high]
         for tr in self.tracks.values():
             tr.matched_now = False
@@ -176,11 +215,13 @@ class PlayerTracker:
                 if was_lost:
                     events.append({"event": "rejoined", "player_id": best.id})
                 continue
+            if not c.from_detection:
+                continue             # a re-crop of a known player never makes a new one
             new_id = self._free_id()
             if new_id is None:
                 continue             # all slots taken: treat as a spectator
             tr = Track(new_id, BoxKalman(c.box, t), JointSmoother(self.cfg.tracking, self.h),
-                       c.kpts, c.scores, c.box, t, t, quality(c.scores), z=c.z, hist=hist)
+                       c.kpts, c.scores, c.box, t, t, quality(c.scores, c.in_frame), z=c.z, hist=hist)
             tr.smoother.update(c.kpts, c.scores, t)
             self.tracks[new_id] = tr
             events.append({"event": "joined", "player_id": new_id})
@@ -249,7 +290,7 @@ class PlayerTracker:
         tr.kf.update(c.box, t)
         tr.smoother.update(c.kpts, c.scores, t)
         tr.kpts, tr.scores, tr.box, tr.z = c.kpts, c.scores, c.box, c.z
-        tr.quality = quality(c.scores)
+        tr.quality = quality(c.scores, c.in_frame)
         tr.t_last = t
         tr.misses = 0
         tr.hits += 1
@@ -268,13 +309,13 @@ class PlayerTracker:
         Duplicates are near-identical (OKS ~0.95+). Two different people who
         overlap can still reach OKS ~0.6, so the bar is high and the boxes
         must agree too."""
-        cands = sorted(cands, key=lambda c: -quality(c.scores))
+        cands = sorted(cands, key=lambda c: -quality(c.scores, c.in_frame))
         kept: list[tuple[PoseCandidate, np.ndarray]] = []
         for c in cands:
             box = boxes_from_keypoints(c.kpts, c.scores)
             area = max((box[2] - box[0]) * (box[3] - box[1]), 1.0)
-            if all(oks(c.kpts, c.scores, k.kpts, k.scores, area) < 0.85 or iou(box, kb) < 0.7
-                   for k, kb in kept):
+            if all((oks(c.kpts, c.scores, k.kpts, k.scores, area) < 0.85 or iou(box, kb) < 0.7)
+                   and not same_face(c, k) for k, kb in kept):
                 kept.append((c, box))
         return [c for c, _ in kept]
 

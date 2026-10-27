@@ -59,8 +59,14 @@ class InputInfo:
 
 
 def create_session(model_path: str | Path, prefer: Sequence[str] = ("tensorrt", "cuda", "directml", "coreml", "cpu"),
-                   fp16: bool = True, max_batch: int = 4, threads: int | None = None):
-    """Create an InferenceSession using the best available provider."""
+                   fp16: bool = True, max_batch: int = 4, threads: int | None = None,
+                   fixed_shape: Sequence[int] | None = None):
+    """Create an InferenceSession using the best available provider.
+
+    ``fixed_shape`` (e.g. (1, 3, 256, 192)) pins every symbolic input
+    dimension when DirectML is used: ONNX Runtime's DirectML docs say it
+    performs best with static shapes, and the OpenMMLab exports have a
+    free batch (and sometimes height/width) dimension."""
     import onnxruntime as ort
 
     model_path = str(model_path)
@@ -72,6 +78,13 @@ def create_session(model_path: str | Path, prefer: Sequence[str] = ("tensorrt", 
     so.log_severity_level = 3
     if threads:
         so.intra_op_num_threads = threads
+
+    chosen = next((k for k in prefer if PROVIDERS.get(k) in available), "cpu")
+    if chosen == "directml" and fixed_shape is not None:
+        info = read_input(model_path)
+        for dim, value in zip(info.shape, fixed_shape):
+            if isinstance(dim, str) and dim:
+                so.add_free_dimension_override_by_name(dim, int(value))
 
     providers: list[Any] = []
     for key in prefer:

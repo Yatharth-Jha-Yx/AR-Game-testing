@@ -52,7 +52,8 @@ class PersonDetector:
 
     def __init__(self, model_path: Path, spec: ModelSpec, providers: Sequence[str], fp16: bool):
         self.spec = spec
-        self.sess = create_session(model_path, providers, fp16=fp16, max_batch=1)
+        w, h = spec.input_size
+        self.sess = create_session(model_path, providers, fp16=fp16, max_batch=1, fixed_shape=(1, 3, h, w))
         self.input = session_input(self.sess)
         hw = self.input.hw
         self.size = (hw[1], hw[0]) if hw else spec.input_size
@@ -120,11 +121,15 @@ class TopDownPose:
     def __init__(self, model_path: Path, spec: ModelSpec, providers: Sequence[str], fp16: bool,
                  max_batch: int = 4):
         self.spec = spec
-        self.sess = create_session(model_path, providers, fp16=fp16, max_batch=max_batch)
+        w, h = spec.input_size
+        self.sess = create_session(model_path, providers, fp16=fp16, max_batch=max_batch,
+                                   fixed_shape=(1, 3, h, w))
         self.input = session_input(self.sess)
         hw = self.input.hw
         self.size = (hw[1], hw[0]) if hw else spec.input_size        # (w, h)
-        self.batched = self.input.dynamic_batch
+        self.provider = active_provider(self.sess)
+        # DirectML gets a fixed batch of 1 (see create_session), so feed crops one by one.
+        self.batched = self.input.dynamic_batch and self.provider != "directml"
         self.max_batch = max_batch
         self.split = float(spec.extra.get("simcc_split_ratio", 2.0))
         self.provider = active_provider(self.sess)

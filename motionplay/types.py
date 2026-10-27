@@ -35,6 +35,11 @@ class PoseCandidate:
     scores: np.ndarray           # (26,) 0..1
     det_score: float = 1.0
     z: np.ndarray | None = None  # (26,) relative depth if the model gives one
+    # True when the pose came from a person-detector box (or a one-stage model),
+    # False when it came from re-cropping an already tracked player. Only
+    # detections may create new players.
+    from_detection: bool = True
+    in_frame: np.ndarray | None = None   # (26,) bool, joint inside the picture
 
     @property
     def mean_score(self) -> float:

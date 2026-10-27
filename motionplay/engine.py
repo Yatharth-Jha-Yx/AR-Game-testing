@@ -140,8 +140,13 @@ class Engine:
                     dets = dets[dets[:, 4] >= self.cfg.vision.det_score_low] if len(dets) else dets
                     keep = [b for b in boxes if all(iou(b, d) < 0.5 for d in dets)]
                     boxes = np.vstack([dets.reshape(-1, 5), np.array(keep, np.float32).reshape(-1, 5)])
+                    n_det = len(dets)
+                else:
+                    n_det = 0
                 p1 = time.perf_counter()
                 cands = self.backend.estimate(frame, boxes) if len(boxes) else []
+                for i, c in enumerate(cands):
+                    c.from_detection = i < n_det
                 timings["pose"] = (time.perf_counter() - p1) * 1000
             self._pose_ms = 0.9 * self._pose_ms + 0.1 * (timings["pose"] + timings.get("detect", 0) / 10)
             p2 = time.perf_counter()

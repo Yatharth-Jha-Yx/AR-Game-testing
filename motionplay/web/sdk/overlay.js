@@ -20,7 +20,8 @@ export function installOverlay(mp, opts = {}) {
     <div class="mp-cam" hidden><span class="mp-dot"></span><span class="mp-cam-text">Camera on</span></div>
     <div class="mp-toasts"></div>
     <div class="mp-banner" hidden></div>
-    <div class="mp-modal" hidden><div class="mp-card"></div></div>`;
+    <div class="mp-modal" hidden><div class="mp-card"></div></div>
+    <div class="mp-stats" hidden></div>`;
   document.body.appendChild(root);
   const cam = root.querySelector(".mp-cam");
   const camText = root.querySelector(".mp-cam-text");
@@ -28,6 +29,23 @@ export function installOverlay(mp, opts = {}) {
   const banner = root.querySelector(".mp-banner");
   const modal = root.querySelector(".mp-modal");
   const card = root.querySelector(".mp-card");
+  const stats = root.querySelector(".mp-stats");
+
+  // Live health numbers (same as the console line) so a screenshot shows
+  // whether lag comes from the camera, the AI, or elsewhere. Toggle with "h".
+  let statsOn = opts.stats ?? true;
+  mp.on("status", (st) => {
+    const cam = st.source.measured_fps || st.source.fps;
+    const tm = st.timings_ms;
+    const ai = (tm.pose || 0) + (tm.detect || 0) / 10;
+    stats.textContent = `camera ${Math.round(cam)} fps · tracking ${st.processed_fps} fps · ` +
+      `AI ${ai.toFixed(1)} ms · delay ${Math.round(st.latency_ms.mean)} ms · ` +
+      `${st.backend.name} (${st.backend.provider})`;
+    stats.hidden = !statsOn;
+  });
+  addEventListener("keydown", (e) => {
+    if (e.key === "h") { statsOn = !statsOn; stats.hidden = !statsOn || !mp.status; }
+  });
 
   const state = { modal: null, lost: new Map(), hintToast: new Map(), playStart: performance.now() };
 
